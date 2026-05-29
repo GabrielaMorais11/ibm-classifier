@@ -41,9 +41,9 @@
         </header>
         <div class="card">
             <div class="upload-area" id="uploadArea" onclick="document.getElementById('fileInput').click()">
-                <p>📤 Clique aqui ou arraste seu arquivo CSV</p>
-                <p style="font-size: 0.9rem; color: #999; margin-top: 10px;">Formato aceito: .csv</p>
-                <input type="file" id="fileInput" accept=".csv" style="display:none">
+                <p>📤 Clique aqui ou arraste seu arquivo Excel</p>
+                <p style="font-size: 0.9rem; color: #999; margin-top: 10px;">Formatos aceitos: .xlsx, .xls</p>
+                <input type="file" id="fileInput" accept=".xlsx,.xls" style="display:none">
             </div>
             <div id="fileInfo" class="file-info hidden">
                 <p id="fileName">📄 Arquivo selecionado</p>
@@ -54,10 +54,10 @@
             <div class="info-box">
                 <h3>ℹ️ Como usar:</h3>
                 <ul>
-                    <li>Exporte seu Excel para CSV</li>
-                    <li>Faça upload do arquivo CSV</li>
-                    <li>Clique em "Classificar Contas"</li>
-                    <li>Baixe o resultado (abre no Excel)</li>
+                    <li>Prepare um arquivo Excel com os nomes das contas</li>
+                    <li>Faça upload do arquivo usando o botão acima</li>
+                    <li>Clique em "Classificar Contas" e aguarde</li>
+                    <li>Baixe o arquivo com as classificações adicionadas</li>
                 </ul>
             </div>
         </div>
@@ -125,7 +125,7 @@
             const url = URL.createObjectURL(resultBlob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = 'contas_classificadas_' + new Date().getTime() + '.csv';
+            a.download = 'contas_classificadas_' + new Date().getTime() + '.xlsx';
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
