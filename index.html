@@ -37,12 +37,12 @@
     <div class="container">
         <header>
             <h1>🏢 Classificador de Contas IBM</h1>
-            <p>Classifique suas contas automaticamente em segundos</p>
+            <p>Classifique suas contas automaticamente</p>
         </header>
         <div class="card">
             <div class="upload-area" id="uploadArea" onclick="document.getElementById('fileInput').click()">
-                <p>📤 Clique aqui ou arraste seu arquivo Excel</p>
-                <p style="font-size: 0.9rem; color: #999; margin-top: 10px;">Formatos aceitos: .csv</p>
+                <p>📤 Clique aqui ou arraste seu arquivo CSV</p>
+                <p style="font-size: 0.9rem; color: #999; margin-top: 10px;">Formato aceito: .csv</p>
                 <input type="file" id="fileInput" accept=".csv" style="display:none">
             </div>
             <div id="fileInfo" class="file-info hidden">
@@ -54,10 +54,10 @@
             <div class="info-box">
                 <h3>ℹ️ Como usar:</h3>
                 <ul>
-                    <li>Prepare um arquivo Excel com os nomes das contas</li>
-                    <li>Faça upload do arquivo usando o botão acima</li>
-                    <li>Clique em "Classificar Contas" e aguarde</li>
-                    <li>Baixe o arquivo com as classificações adicionadas</li>
+                    <li>Exporte seu Excel para CSV</li>
+                    <li>Faça upload do arquivo CSV</li>
+                    <li>Clique em "Classificar Contas"</li>
+                    <li>Baixe o resultado (abre no Excel)</li>
                 </ul>
             </div>
         </div>
@@ -109,7 +109,7 @@
                 const response = await fetch('/classify', { method: 'POST', body: formData });
                 if (!response.ok) {
                     const error = await response.json();
-                    throw new Error(error.error || 'Erro ao processar arquivo');
+                    throw new Error(error.error || 'Erro ao processar');
                 }
                 resultBlob = await response.blob();
                 btn.classList.add('hidden');
@@ -125,7 +125,7 @@
             const url = URL.createObjectURL(resultBlob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = 'contas_classificadas_' + new Date().getTime() + '.xlsx';
+            a.download = 'contas_classificadas_' + new Date().getTime() + '.csv';
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
