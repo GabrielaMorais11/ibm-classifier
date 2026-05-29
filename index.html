@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Classificador de Contas IBM</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; padding: 20px; }
+        .container { max-width: 800px; margin: 0 auto; }
+        header { background: white; padding: 40px; border-radius: 15px; text-align: center; margin-bottom: 30px; box-shadow: 0 10px 30px rgba(0,0,0,0.2); }
+        header h1 { color: #333; font-size: 2.5rem; margin-bottom: 10px; }
+        header p { color: #666; font-size: 1.1rem; }
+        .card { background: white; padding: 40px; border-radius: 15px; box-shadow: 0 10px 30px rgba(0,0,0,0.2); }
+        .upload-area { border: 3px dashed #ccc; padding: 60px 20px; text-align: center; border-radius: 10px; cursor: pointer; transition: all 0.3s ease; margin: 20px 0; }
+        .upload-area:hover { border-color: #667eea; background: #f8f9ff; }
+        .upload-area p { font-size: 1.2rem; color: #666; }
+        .file-info { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 20px; border-radius: 10px; margin: 20px 0; display: flex; justify-content: space-between; align-items: center; }
+        .file-info p { font-size: 1.1rem; font-weight: 500; }
+        button { width: 100%; padding: 18px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; border-radius: 10px; font-size: 1.2rem; font-weight: 600; cursor: pointer; transition: all 0.3s ease; margin-top: 15px; }
+        button:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 5px 20px rgba(102, 126, 234, 0.4); }
+        button:disabled { background: #ccc; cursor: not-allowed; transform: none; }
+        .success { background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%); }
+        .success:hover { box-shadow: 0 5px 20px rgba(56, 239, 125, 0.4); }
+        .remove-btn { background: rgba(255,255,255,0.2); padding: 10px 20px; width: auto; margin: 0; font-size: 1rem; }
+        .remove-btn:hover { background: rgba(255,255,255,0.3); }
+        .hidden { display: none; }
+        .info-box { background: #f8f9ff; border-left: 4px solid #667eea; padding: 20px; border-radius: 8px; margin-top: 30px; }
+        .info-box h3 { color: #667eea; margin-bottom: 10px; }
+        .info-box ul { margin-left: 20px; color: #666; }
+        .info-box li { margin: 8px 0; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .spinner { display: inline-block; width: 20px; height: 20px; border: 3px solid rgba(255,255,255,0.3); border-top-color: white; border-radius: 50%; animation: spin 0.8s linear infinite; margin-right: 10px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🏢 Classificador de Contas IBM</h1>
+            <p>Classifique suas contas automaticamente em segundos</p>
+        </header>
+        <div class="card">
+            <div class="upload-area" id="uploadArea" onclick="document.getElementById('fileInput').click()">
+                <p>📤 Clique aqui ou arraste seu arquivo Excel</p>
+                <p style="font-size: 0.9rem; color: #999; margin-top: 10px;">Formatos aceitos: .xlsx, .xls</p>
+                <input type="file" id="fileInput" accept=".xlsx,.xls" style="display:none">
+            </div>
+            <div id="fileInfo" class="file-info hidden">
+                <p id="fileName">📄 Arquivo selecionado</p>
+                <button class="remove-btn" onclick="removeFile()">✕ Remover</button>
+            </div>
+            <button id="classifyBtn" onclick="classify()" disabled>Classificar Contas</button>
+            <button id="downloadBtn" class="success hidden" onclick="download()">⬇️ Baixar Arquivo Classificado</button>
+            <div class="info-box">
+                <h3>ℹ️ Como usar:</h3>
+                <ul>
+                    <li>Prepare um arquivo Excel com os nomes das contas</li>
+                    <li>Faça upload do arquivo usando o botão acima</li>
+                    <li>Clique em "Classificar Contas" e aguarde</li>
+                    <li>Baixe o arquivo com as classificações adicionadas</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+    <script>
+        let selectedFile = null;
+        let resultBlob = null;
+        document.getElementById('fileInput').addEventListener('change', (e) => {
+            selectedFile = e.target.files[0];
+            if (selectedFile) {
+                document.getElementById('fileName').textContent = '📄 ' + selectedFile.name;
+                document.getElementById('fileInfo').classList.remove('hidden');
+                document.getElementById('uploadArea').classList.add('hidden');
+                document.getElementById('classifyBtn').disabled = false;
+            }
+        });
+        const uploadArea = document.getElementById('uploadArea');
+        uploadArea.addEventListener('dragover', (e) => { e.preventDefault(); uploadArea.style.borderColor = '#667eea'; uploadArea.style.background = '#f8f9ff'; });
+        uploadArea.addEventListener('dragleave', () => { uploadArea.style.borderColor = '#ccc'; uploadArea.style.background = 'transparent'; });
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.style.borderColor = '#ccc';
+            uploadArea.style.background = 'transparent';
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                selectedFile = files[0];
+                document.getElementById('fileName').textContent = '📄 ' + selectedFile.name;
+                document.getElementById('fileInfo').classList.remove('hidden');
+                document.getElementById('uploadArea').classList.add('hidden');
+                document.getElementById('classifyBtn').disabled = false;
+            }
+        });
+        function removeFile() {
+            selectedFile = null;
+            document.getElementById('fileInput').value = '';
+            document.getElementById('fileInfo').classList.add('hidden');
+            document.getElementById('uploadArea').classList.remove('hidden');
+            document.getElementById('classifyBtn').disabled = true;
+            document.getElementById('downloadBtn').classList.add('hidden');
+        }
+        async function classify() {
+            if (!selectedFile) return;
+            const btn = document.getElementById('classifyBtn');
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner"></span> Processando...';
+            const formData = new FormData();
+            formData.append('file', selectedFile);
+            try {
+                const response = await fetch('/classify', { method: 'POST', body: formData });
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.error || 'Erro ao processar arquivo');
+                }
+                resultBlob = await response.blob();
+                btn.classList.add('hidden');
+                document.getElementById('downloadBtn').classList.remove('hidden');
+            } catch (error) {
+                alert('❌ Erro: ' + error.message);
+                btn.disabled = false;
+                btn.textContent = 'Classificar Contas';
+            }
+        }
+        function download() {
+            if (!resultBlob) return;
+            const url = URL.createObjectURL(resultBlob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'contas_classificadas_' + new Date().getTime() + '.xlsx';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            setTimeout(() => { location.reload(); }, 500);
+        }
+    </script>
+</body>
+</html>
