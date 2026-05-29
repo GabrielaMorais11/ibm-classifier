@@ -1,15 +1,13 @@
 from flask import Flask, request, jsonify, send_file
 from flask_cors import CORS
-import json
-import csv
-from io import StringIO, BytesIO
+from openpyxl import load_workbook, Workbook
+from io import BytesIO
 from datetime import datetime
 import os
 
 app = Flask(__name__, static_folder='.', static_url_path='')
 CORS(app)
 
-# Base de dados mestre
 MASTER_DATA = {
     'banco do brasil': 'Enterprise',
     'petrobras': 'Enterprise',
@@ -34,11 +32,9 @@ def normalize(text):
 def find_classification(account_name):
     normalized = normalize(account_name)
     
-    # Busca exata
     if normalized in MASTER_DATA:
         return MASTER_DATA[normalized], 'Base Mestre', '100%'
     
-    # Busca parcial
     for key in MASTER_DATA:
         if key in normalized or normalized in key:
             return MASTER_DATA[key], 'Base Mestre', '80%'
@@ -54,8 +50,7 @@ def health():
     return jsonify({
         'status': 'ok',
         'message': 'API funcionando',
-        'timestamp': datetime.now().isoformat(),
-        'total_contas': len(MASTER_DATA)
+        'timestamp': datetime.now().isoformat()
     })
 
 @app.route('/classify', methods=['POST'])
@@ -69,43 +64,36 @@ def classify():
         if file.filename == '':
             return jsonify({'error': 'Nome vazio'}), 400
         
-        # Ler arquivo como texto
-        content = file.read().decode('utf-8', errors='ignore')
+        # Ler Excel
+        wb = load_workbook(filename=BytesIO(file.read()))
+        ws = wb.active
         
-        # Processar CSV
-        lines = content.strip().split('\n')
-        if not lines:
-            return jsonify({'error': 'Arquivo vazio'}), 400
+        # Adicionar colunas de classificação
+        max_col = ws.max_column
+        ws.cell(1, max_col + 1, 'Classificacao')
+        ws.cell(1, max_col + 2, 'Metodo')
+        ws.cell(1, max_col + 3, 'Confianca')
         
-        # Criar resultado
-        result_lines = []
-        header = lines[0] + ',Classificacao,Metodo,Confianca'
-        result_lines.append(header)
-        
-        for line in lines[1:]:
-            if not line.strip():
-                continue
-            
-            parts = line.split(',')
-            if not parts:
-                continue
-            
-            account_name = parts[0]
+        # Classificar cada linha
+        for row in range(2, ws.max_row + 1):
+            account_name = ws.cell(row, 1).value
             classification, method, confidence = find_classification(account_name)
             
-            result_line = line + f',{classification},{method},{confidence}'
-            result_lines.append(result_line)
+            ws.cell(row, max_col + 1, classification)
+            ws.cell(row, max_col + 2, method)
+            ws.cell(row, max_col + 3, confidence)
         
-        # Gerar CSV de saída
-        output = '\n'.join(result_lines)
+        # Salvar em BytesIO
+        output = BytesIO()
+        wb.save(output)
+        output.seek(0)
         
-        # Retornar arquivo
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        filename = f'contas_classificadas_{timestamp}.csv'
+        filename = f'contas_classificadas_{timestamp}.xlsx'
         
         return send_file(
-            BytesIO(output.encode('utf-8')),
-            mimetype='text/csv',
+            output,
+            mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
             as_attachment=True,
             download_name=filename
         )
