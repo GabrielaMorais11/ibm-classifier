@@ -1,13 +1,17 @@
-from flask import Flask, request, jsonify, send_file
+from flask import Flask, request, send_file, jsonify
 from flask_cors import CORS
-from openpyxl import load_workbook, Workbook
+import pandas as pd
 from io import BytesIO
 from datetime import datetime
+from difflib import get_close_matches
 import os
+import unicodedata
+import re
 
 app = Flask(__name__, static_folder='.', static_url_path='')
 CORS(app)
 
+# Base de dados mestre - EDITE AQUI para adicionar/remover contas
 MASTER_DATA = {
     # Contas originais
     "BANCO DO BRASIL": "Enterprise",
@@ -197,70 +201,120 @@ MASTER_DATA = {
     "ZAMP": "Select T",
 }
 
-def normalize(text):
-    if not text:
-        return ''
-    return str(text).strip().lower()
+def normalize_text(text):
+    """Normaliza texto: remove acentos, maiúsculas, espaços extras"""
+    if not text or pd.isna(text):
+        return ""
+    
+    # Converter para string e maiúsculas
+    text = str(text).upper().strip()
+    
+    # Remover acentos
+    text = unicodedata.normalize('NFD', text)
+    text = ''.join(char for char in text if unicodedata.category(char) != 'Mn')
+    
+    # Remover caracteres especiais, manter apenas letras, números e espaços
+    text = re.sub(r'[^A-Z0-9\s]', ' ', text)
+    
+    # Remover espaços múltiplos
+    text = re.sub(r'\s+', ' ', text).strip()
+    
+    return text
 
-def find_classification(account_name):
-    normalized = normalize(account_name)
+def find_best_match(account_name, master_data):
+    """Encontra a melhor correspondência para um nome de conta"""
+    if not account_name or pd.isna(account_name):
+        return None, 0
     
-    if normalized in MASTER_DATA:
-        return MASTER_DATA[normalized], 'Base Mestre', '100%'
+    # Normalizar nome da conta
+    account_normalized = normalize_text(account_name)
     
-    for key in MASTER_DATA:
-        if key in normalized or normalized in key:
-            return MASTER_DATA[key], 'Base Mestre', '80%'
+    # Criar dicionário normalizado
+    normalized_master = {normalize_text(k): v for k, v in master_data.items()}
     
-    return 'Não Classificado', 'Não encontrado', '0%'
+    # Busca exata
+    if account_normalized in normalized_master:
+        return normalized_master[account_normalized], 1.0
+    
+    # Busca parcial (se o nome da conta contém ou está contido em alguma chave)
+    for master_key, classification in normalized_master.items():
+        if account_normalized in master_key or master_key in account_normalized:
+            return classification, 0.9
+    
+    # Busca fuzzy
+    matches = get_close_matches(account_normalized, normalized_master.keys(), n=1, cutoff=0.7)
+    if matches:
+        return normalized_master[matches[0]], 0.8
+    
+    return None, 0
 
 @app.route('/')
 def index():
+    """Serve a página principal"""
     return app.send_static_file('index.html')
 
 @app.route('/health')
 def health():
+    """Endpoint de health check"""
     return jsonify({
         'status': 'ok',
         'message': 'API funcionando',
-        'timestamp': datetime.now().isoformat()
+        'timestamp': datetime.now().isoformat(),
+        'total_contas': len(MASTER_DATA)
     })
 
 @app.route('/classify', methods=['POST'])
 def classify():
+    """Endpoint principal para classificar contas"""
     try:
+        # Verificar se arquivo foi enviado
         if 'file' not in request.files:
             return jsonify({'error': 'Nenhum arquivo enviado'}), 400
         
         file = request.files['file']
         
         if file.filename == '':
-            return jsonify({'error': 'Nome vazio'}), 400
+            return jsonify({'error': 'Nome de arquivo vazio'}), 400
         
-        # Ler Excel
-        wb = load_workbook(filename=BytesIO(file.read()))
-        ws = wb.active
+        # Ler arquivo Excel
+        try:
+            input_df = pd.read_excel(file)
+        except Exception as e:
+            return jsonify({'error': f'Erro ao ler Excel: {str(e)}'}), 400
         
-        # Adicionar colunas de classificação
-        max_col = ws.max_column
-        ws.cell(1, max_col + 1, 'Classificacao')
-        ws.cell(1, max_col + 2, 'Metodo')
-        ws.cell(1, max_col + 3, 'Confianca')
+        if input_df.empty:
+            return jsonify({'error': 'Arquivo vazio'}), 400
         
-        # Classificar cada linha
-        for row in range(2, ws.max_row + 1):
-            account_name = ws.cell(row, 1).value
-            classification, method, confidence = find_classification(account_name)
+        # Identificar coluna de contas (primeira coluna)
+        account_column = input_df.columns[0]
+        
+        # Criar cópia e adicionar colunas de classificação
+        result_df = input_df.copy()
+        result_df['Classificacao'] = ''
+        result_df['Metodo'] = ''
+        result_df['Confianca'] = ''
+        
+        # Classificar cada conta
+        for idx, row in result_df.iterrows():
+            account_name = row[account_column]
+            classification, score = find_best_match(account_name, MASTER_DATA)
             
-            ws.cell(row, max_col + 1, classification)
-            ws.cell(row, max_col + 2, method)
-            ws.cell(row, max_col + 3, confidence)
+            if classification and score >= 0.7:
+                result_df.at[idx, 'Classificacao'] = classification
+                result_df.at[idx, 'Metodo'] = 'Base Mestre'
+                result_df.at[idx, 'Confianca'] = f'{score:.0%}'
+            else:
+                result_df.at[idx, 'Classificacao'] = 'Não Classificado'
+                result_df.at[idx, 'Metodo'] = 'Não encontrado na base'
+                result_df.at[idx, 'Confianca'] = '0%'
         
-        # Salvar em BytesIO
+        # Gerar arquivo Excel de saída
         output = BytesIO()
-        wb.save(output)
+        with pd.ExcelWriter(output, engine='openpyxl') as writer:
+            result_df.to_excel(writer, index=False, sheet_name='Contas Classificadas')
         output.seek(0)
         
+        # Retornar arquivo
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
         filename = f'contas_classificadas_{timestamp}.xlsx'
         
@@ -272,8 +326,8 @@ def classify():
         )
         
     except Exception as e:
-        print(f"Erro: {e}")
-        return jsonify({'error': str(e)}), 500
+        print(f"Erro no processamento: {e}")
+        return jsonify({'error': f'Erro ao processar: {str(e)}'}), 500
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 10000))
